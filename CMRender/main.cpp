@@ -7,7 +7,7 @@
 * Autor: Jakob Progsch
 */
 
-#include <GL/glew.h>
+#include <GL/glew.h> // Mark -- Originally it was glxw
 #include <GLFW/glfw3.h>
 
 //glm is used to create perspective and transform matrices
@@ -75,7 +75,7 @@ int main() {
 
 	glfwMakeContextCurrent(window);
 
-	if (glewInit()) { // Originally glxwInit()
+	if (glewInit()) { // Mark -- Originally it was glxwInit()
 		std::cout << "failed to init GL3W" << std::endl;
 		glfwDestroyWindow(window);
 		glfwTerminate();
