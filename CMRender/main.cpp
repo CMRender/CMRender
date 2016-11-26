@@ -16,10 +16,19 @@
 #include <glm/gtc/type_ptr.hpp> 
 
 #include <iostream>
-#include <string>
+//#include <string>
 #include <vector>
 #include <cstdlib>
 
+#include "BasicShaders.h"
+#include "imgui.h"
+#include "imgui_impl_glfw_gl3.h"
+
+
+
+
+// Forward decleration for cleanliness (Ignore)
+void APIENTRY debugCallbackARB(GLenum, GLenum, GLuint, GLenum, GLsizei, const GLchar *, GLvoid *);
 
 // helper to check and display for shader compiler errors
 bool check_shader_compile_status(GLuint obj) {
@@ -52,6 +61,12 @@ bool check_program_link_status(GLuint obj) {
 }
 
 int main() {
+
+
+	//------------------------------------------------------------------------------------------------
+	//                                     Window, opengl, and extension stuff
+	//------------------------------------------------------------------------------------------------
+	
 	int width = 640;
 	int height = 480;
 
@@ -60,10 +75,14 @@ int main() {
 		return 1;
 	}
 
+	// Get the version for GLFW for later
+	int glfwMajor, glfwMinor, glfwRevision;
+	glfwGetVersion(&glfwMajor, &glfwMinor, &glfwRevision);
+
 	// select opengl version
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	//glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	//glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
 	// create a window
 	GLFWwindow *window;
@@ -73,56 +92,49 @@ int main() {
 		return 1;
 	}
 
+	// Make the g_window's context is current.
+	// If we have multiple windows we will need to switch contexts
 	glfwMakeContextCurrent(window);
 
+	//Initialize GLEW
+	// must be done after making a GL context current (glfwMakeContextCurrent in this case)
+	glewExperimental = GL_TRUE; // required for full GLEW functionality for OpenGL 3.0+
 	if (glewInit()) { // Mark -- Originally it was glxwInit()
-		std::cout << "failed to init GL3W" << std::endl;
+		std::cout << "failed to init GLEW" << std::endl;
 		glfwDestroyWindow(window);
 		glfwTerminate();
 		return 1;
 	}
 
-	// the vertex shader simply passes through data
-	std::string vertex_source =
-		"#version 330\n"
-		"layout(location = 0) in vec4 vposition;\n"
-		"void main() {\n"
-		"   gl_Position = vposition;\n"
-		"}\n";
+	// Print out our OpenGL verisions
+	std::cout << "Using OpenGL " << glGetString(GL_VERSION) << std::endl;
+	std::cout << "Using GLEW " << glewGetString(GLEW_VERSION) << std::endl;
+	std::cout << "Using GLFW " << glfwMajor << "." << glfwMinor << "." << glfwRevision << std::endl;
 
-	// the geometry shader creates the billboard quads
-	std::string geometry_source =
-		"#version 330\n"
-		"uniform mat4 View;\n"
-		"uniform mat4 Projection;\n"
-		"layout (points) in;\n"
-		"layout (triangle_strip, max_vertices = 4) out;\n"
-		"out vec2 txcoord;\n"
-		"void main() {\n"
-		"   vec4 pos = View*gl_in[0].gl_Position;\n"
-		"   txcoord = vec2(-1,-1);\n"
-		"   gl_Position = Projection*(pos+vec4(txcoord,0,0));\n"
-		"   EmitVertex();\n"
-		"   txcoord = vec2( 1,-1);\n"
-		"   gl_Position = Projection*(pos+vec4(txcoord,0,0));\n"
-		"   EmitVertex();\n"
-		"   txcoord = vec2(-1, 1);\n"
-		"   gl_Position = Projection*(pos+vec4(txcoord,0,0));\n"
-		"   EmitVertex();\n"
-		"   txcoord = vec2( 1, 1);\n"
-		"   gl_Position = Projection*(pos+vec4(txcoord,0,0));\n"
-		"   EmitVertex();\n"
-		"}\n";
+	// Enable GL_ARB_debug_output if available. Not nessesary, just helpful
+	if (glfwExtensionSupported("GL_ARB_debug_output")) {
+		// This allows the error location to be determined from a stacktrace
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+		// Set the up callback
+		glDebugMessageCallbackARB(debugCallbackARB, nullptr);
+		glDebugMessageControlARB(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, true);
+		std::cout << "GL_ARB_debug_output callback installed" << std::endl;
+	}
+	else {
+		std::cout << "GL_ARB_debug_output not available. No worries." << std::endl;
+	}
 
-	// the fragment shader creates a bell like radial color distribution    
-	std::string fragment_source =
-		"#version 330\n"
-		"in vec2 txcoord;\n"
-		"layout(location = 0) out vec4 FragColor;\n"
-		"void main() {\n"
-		"   float s = 0.2*(1/(1+15.*dot(txcoord, txcoord))-1/16.);\n"
-		"   FragColor = s*vec4(1,0.9,0.6,1);\n"
-		"}\n";
+	
+	// Setup ImGui binding
+	ImGui_ImplGlfwGL3_Init(window, true);
+
+	bool show_test_window = true;
+	bool show_another_window = false;
+	ImVec4 clear_color = ImColor(114, 144, 154);
+
+	//------------------------------------------------------------------------------------------------
+	//                                     Shader Stuff
+	//------------------------------------------------------------------------------------------------
 
 	// program and shader handles
 	GLuint shader_program, vertex_shader, geometry_shader, fragment_shader;
@@ -179,6 +191,10 @@ int main() {
 	glLinkProgram(shader_program);
 	check_program_link_status(shader_program);
 
+	//------------------------------------------------------------------------------------------------
+	//                                     Initialize Geometry/Material/Lights
+	//------------------------------------------------------------------------------------------------
+
 	// obtain location of projection uniform
 	GLint View_location = glGetUniformLocation(shader_program, "View");
 	GLint Projection_location = glGetUniformLocation(shader_program, "Projection");
@@ -194,9 +210,8 @@ int main() {
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-	const int particles = 128 * 1024;
-
 	// create a galaxylike distribution of points
+	const int particles = 128 * 1024;
 	std::vector<GLfloat> vertexData(particles * 3);
 	for (int i = 0; i<particles; ++i)
 	{
@@ -233,12 +248,34 @@ int main() {
 	//  and set the blend function to result = 1*source + 1*destination
 	glBlendFunc(GL_ONE, GL_ONE);
 
+
+	//------------------------------------------------------------------------------------------------
+	//                                     Main Loop
+	//------------------------------------------------------------------------------------------------
+
 	while (!glfwWindowShouldClose(window)) {
+		
 		glfwPollEvents();
+		ImGui_ImplGlfwGL3_NewFrame();
+
+
+		// 1. Show a simple window
+		// Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets appears in a window automatically called "Debug"
+		
+		static float speed = 0.5f;
+		{
+			ImGui::Text("Hello, world!");
+			ImGui::SliderFloat("Speed", &speed, 0.0f, 1.0f);
+			ImGui::ColorEdit3("clear color", (float*)&clear_color);
+			if (ImGui::Button("Test Window")) show_test_window ^= 1;
+			if (ImGui::Button("Another Window")) show_another_window ^= 1;
+			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		}
+
 
 		// get the time in seconds
 		float t = glfwGetTime();
-
+		t *= speed;
 
 		// clear first
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -267,19 +304,29 @@ int main() {
 		// draw
 		glDrawArrays(GL_POINTS, 0, particles);
 
-		// check for errors -- THIS FUCKER BREAKS THE CODE
+		// check for errors -- this breaks the code when context is set to opengl 3.1+
 		/*GLenum error = glGetError();
 		if (error != GL_NO_ERROR) {
 			std::cerr << error << std::endl;
 			break;
 		}*/
 
+		int display_w, display_h;
+		glfwGetFramebufferSize(window, &display_w, &display_h);
+		glViewport(0, 0, display_w, display_h);
+		//glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+		//glClear(GL_COLOR_BUFFER_BIT);
+
 		// finally swap buffers
+		ImGui::Render();
 		glfwSwapBuffers(window);
 	}
 
-	// delete the created objects
+	//------------------------------------------------------------------------------------------------
+	//                                     Clean-up
+	//------------------------------------------------------------------------------------------------
 
+	// delete the created objects
 	glDeleteVertexArrays(1, &vao);
 	glDeleteBuffers(1, &vbo);
 
@@ -291,7 +338,86 @@ int main() {
 	glDeleteShader(fragment_shader);
 	glDeleteProgram(shader_program);
 
+	ImGui_ImplGlfwGL3_Shutdown();
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	return 0;
+}
+
+
+//--------------------------------------------------------------------------
+// Fancy debug stuff
+//--------------------------------------------------------------------------
+
+// function to translate source to string
+std::string getStringForSource(GLenum source) {
+
+	switch (source) {
+	case GL_DEBUG_SOURCE_API:
+		return ("API");
+	case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+		return ("Window System");
+	case GL_DEBUG_SOURCE_SHADER_COMPILER:
+		return ("Shader Compiler");
+	case GL_DEBUG_SOURCE_THIRD_PARTY:
+		return ("Third Party");
+	case GL_DEBUG_SOURCE_APPLICATION:
+		return ("Application");
+	case GL_DEBUG_SOURCE_OTHER:
+		return ("Other");
+	default:
+		return ("n/a");
+	}
+}
+
+// function to translate severity to string
+std::string getStringForSeverity(GLenum severity) {
+
+	switch (severity) {
+	case GL_DEBUG_SEVERITY_HIGH:
+		return ("HIGH!");
+	case GL_DEBUG_SEVERITY_MEDIUM:
+		return ("Medium");
+	case GL_DEBUG_SEVERITY_LOW:
+		return ("Low");
+	default:
+		return ("n/a");
+	}
+}
+
+// function to translate type to string
+std::string getStringForType(GLenum type) {
+	switch (type) {
+	case GL_DEBUG_TYPE_ERROR:
+		return ("Error");
+	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+		return ("Deprecated Behaviour");
+	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+		return ("Undefined Behaviour");
+	case GL_DEBUG_TYPE_PORTABILITY:
+		return ("Portability Issue");
+	case GL_DEBUG_TYPE_PERFORMANCE:
+		return ("Performance Issue");
+	case GL_DEBUG_TYPE_OTHER:
+		return ("Other");
+	default:
+		return ("n/a");
+	}
+}
+
+// actually define the function
+void APIENTRY debugCallbackARB(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei, const GLchar *message,
+	GLvoid *) {
+	if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) return;
+
+	std::cerr << std::endl; // extra space
+
+	std::cerr << "Type: " <<
+		getStringForType(type) << "; Source: " <<
+		getStringForSource(source) << "; ID: " << id << "; Severity: " <<
+		getStringForSeverity(severity) << std::endl;
+
+	std::cerr << message << std::endl;
+
+	if (type == GL_DEBUG_TYPE_ERROR_ARB) throw std::runtime_error("");
 }
