@@ -16,13 +16,13 @@
 #include <glm/gtc/type_ptr.hpp> 
 
 #include <iostream>
-//#include <string>
+#include <string>
 #include <vector>
 #include <cstdlib>
 
 #include "BasicShaders.h"
 #include "imgui.h"
-#include "imgui_impl_glfw_gl3.h"
+#include "gui.h"
 
 
 
